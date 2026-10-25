@@ -9,19 +9,13 @@
 #include <ostream>
 #include <stdexcept>
 #include <string>
+#include <sys/types.h>
 
 const static size_t dimensions = 2;
-const static size_t bodies_n = 1;
-const static size_t steps = 10000;
-struct Delta_state {
-  smlib::mvec<float, dimensions> vel;
-  smlib::mvec<float, dimensions> acc;
-  Delta_state(smlib::mvec<float, dimensions> a, smlib::mvec<float, dimensions> b) {
-    vel = a;
-    acc = b;
-  };
-  Delta_state(smlib::mvec<float, dimensions> a) { vel = a; };
-};
+const static size_t bodies_n = 2;
+const static uint steps = pow(10, 5);
+const static uint output_every_n_step = pow(10, 2);
+const static float G = 6.6743 * pow(10, -11);
 struct Body_state {
   smlib::mvec<float, dimensions> pos;
   smlib::mvec<float, dimensions> vel;
@@ -36,7 +30,22 @@ struct Body_state {
     vel = b;
     mass = 1;
   };
-  Body_state(float a = 0) { mass = a; };
+  Body_state(float a = 0) {
+    pos.fill(0);
+    vel.fill(0);
+    mass = a;
+  };
+};
+struct Delta_state {
+  smlib::mvec<float, dimensions> vel;
+  smlib::mvec<float, dimensions> acc;
+  Delta_state(smlib::mvec<float, dimensions> a, smlib::mvec<float, dimensions> b) {
+    vel = a;
+    acc = b;
+  };
+  Delta_state(smlib::mvec<float, dimensions> a) { vel = a; };
+  Delta_state() {};
+  Delta_state(const Body_state &bs) { vel = bs.vel; };
 };
 struct Time {
   float value;
@@ -85,17 +94,17 @@ int main(int argc, char *argv[]) {
     std::cout << "Directory created: " << output_dir << "\n";
   }
   std::array<std::filesystem::path, bodies_n> output_files;
-  for (size_t i = 0; i < output_files.size(); ++i) {
-    output_files[i] = output_dir / std::to_string(i) / ".txt";
-    std::ofstream f(output_files[i]);
-    if (f.is_open()) {
-      f << "";
+  std::array<std::ofstream, bodies_n> output_files_streams;
+  for (int i = 0; i < output_files.size(); ++i) {
+    output_files[i] = output_dir / std::to_string(i).append(".txt");
+    output_files_streams[i].open(output_files[i]);
+    if (output_files_streams[i].is_open()) {
+      output_files_streams[i] << "";
       /*
       if (f.peek() != std::ifstream::traits_type::eof()) {
         std::cout << std::format("File {} is not empty, file size is {} bytes, overwrite? (Y/n)",
                                  output_files[i].filename().string(), std::filesystem::file_size(output_files[i]));
       }*/
-      f.close();
     } else
       std::cout << "Couldnt create file " << output_files[i].string() << "\n";
   }
@@ -111,13 +120,31 @@ int main(int argc, char *argv[]) {
   for (auto it : bodies_bs) {
     std::cout << std::format("pos: {}\nvel: {}\nmass: {}\n\n", it.pos, it.vel, it.mass);
   }
-  for (size_t i = 0; i < steps; ++i) {
-    for (auto &it : bodies_bs) {
-      Delta_state ds(it.vel, {1, 0});
-      it += ds * dt;
+  for (size_t step = 0; step < steps; ++step) {
+    std::array<std::array<smlib::mvec<float, dimensions>, bodies_n>, bodies_n> forces_ij;
+    std::array<Delta_state, bodies_n> ds;
+    for (size_t i = 0; i < bodies_n; ++i) {
+      for (size_t j = i; j < bodies_n; ++j) {
+        smlib::mvec<float, dimensions> pos_diff = (bodies_bs[i].pos - bodies_bs[j].pos);
+        if (!pos_diff.is_near_zero(pow(10, -10))) {
+          float force_mag = G * bodies_bs[i].mass * bodies_bs[j].mass / pos_diff.magnitude_squared();
+          forces_ij[i][j] = force_mag * pos_diff.unit();
+          ds[i].acc += forces_ij[i][j] / bodies_bs[i].mass;
+          ds[j].acc -= forces_ij[i][j] / bodies_bs[i].mass;
+        }
+      }
+    }
+    for (size_t i = 0; i < bodies_n; ++i) {
+      ds[i].vel = bodies_bs[i].vel;
+      bodies_bs[i] += ds[i] * dt;
+    }
+    if (step % output_every_n_step == 0) {
+      for(size_t body=0; body<bodies_n; ++body){
+        output_files_streams[body]<<std::format("{}:{};\n", step, bodies_bs[body].pos.to_string());
+      }
     }
   }
-  for (auto it : bodies_bs) {
+  for (const auto &it : bodies_bs) {
     std::cout << std::format("pos: {}\nvel: {}\nmass: {}\n\n", it.pos, it.vel, it.mass);
   }
   return 0;
