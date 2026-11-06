@@ -13,8 +13,8 @@
 
 const static size_t dimensions = 2;
 const static size_t bodies_n = 2;
-const static uint steps = pow(10, 5);
-const static uint output_every_n_step = pow(10, 2);
+const static uint steps = pow(10, 1);
+const static uint output_every_n_step = pow(10, 0);
 const static float G = 6.6743 * pow(10, -11);
 struct Body_state {
   smlib::mvec<float, dimensions> pos;
@@ -109,7 +109,7 @@ int main(int argc, char *argv[]) {
       std::cout << "Couldnt create file " << output_files[i].string() << "\n";
   }
 
-  Time dt(1.f / steps);
+  Time dt(0.01);
   std::array<Body_state, bodies_n> bodies_bs;
   bodies_bs[0].pos = {0, -1};
   bodies_bs[0].vel = {1, 0};
@@ -139,8 +139,8 @@ int main(int argc, char *argv[]) {
       bodies_bs[i] += ds[i] * dt;
     }
     if (step % output_every_n_step == 0) {
-      for(size_t body=0; body<bodies_n; ++body){
-        output_files_streams[body]<<std::format("{}:{};\n", step, bodies_bs[body].pos.to_string());
+      for (size_t body = 0; body < bodies_n; ++body) {
+        output_files_streams[body] << bodies_bs[body].pos.to_string(false) << "\n";
       }
     }
   }

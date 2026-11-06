@@ -1,14 +1,23 @@
+#include "../../smlib/smlib.hpp"
 #include <SFML/Graphics.hpp>
+#include <SFML/Graphics/CircleShape.hpp>
+#include <SFML/Graphics/Sprite.hpp>
 #include <SFML/System/Time.hpp>
+#include <array>
 #include <cstddef>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+static const size_t bodies_n = 2;
+static const unsigned block_size = 100;
+int eof = -1;
 void make_grid(sf::VertexArray &lines, const sf::Color &color, sf::Vector2f offset, unsigned vertical_cells,
                unsigned horizontal_cells, float spacing);
-static const size_t bodies_n = 2;
+void load_blocks(std::array<std::ifstream, bodies_n> &f,
+                 std::array<std::array<smlib::mvec<float, 2>, block_size>, bodies_n> &blocks);
 int main() {
 
   const unsigned winWidth = 1080;
@@ -17,12 +26,14 @@ int main() {
   const unsigned font_size = 10;
   const sf::Time text_update_time = sf::milliseconds(500); // how long to wait between text updates;
   std::array<std::ifstream, bodies_n> files;
+  std::array<std::array<smlib::mvec<float, 2>, block_size>, bodies_n> blocks;
   float dt = 0;
   sf::Clock fps_clock;
   sf::Clock update_text_clock;
   sf::Font font;
   sf::Text text_fps(font);
   sf::VertexArray grid_lines(sf::PrimitiveType::Lines);
+  std::array<sf::CircleShape, bodies_n> bodies_shapes;
   if (!font.openFromFile("./0xProtoNerdFontMono-Regular.ttf")) {
     std::cerr << "Error: couldnt load font\n";
     return 1;
@@ -32,7 +43,7 @@ int main() {
     ss << "./../output/" << i << ".txt";
     files[i].open(ss.str());
     if (!files[i].is_open()) {
-      std::cerr << "Error: couldnt open file "<<i<<"\n";
+      std::cerr << "Error: couldnt open file " << i << "\n";
       return 1;
     }
   }
@@ -46,6 +57,17 @@ int main() {
 
   make_grid(grid_lines, sf::Color::White, {(winWidth - 21 * 50) / 2.f, (winHeight - 21 * 50) / 2.f}, 21, 21, 50);
 
+  int step = 0;
+  int block_n = 0;
+  block_n++;
+  load_blocks(files, blocks);
+  return 0;
+  for (size_t i = 0; i < bodies_n; ++i) {
+    bodies_shapes[i].setRadius(5);
+    bodies_shapes[i].setFillColor(
+        {static_cast<uint8_t>(255 / (i + 1)), static_cast<uint8_t>(255 - 255 / (i + 1)), 255});
+  }
+  return 0;
   while (window.isOpen()) {
     while (const std::optional<sf::Event> event = window.pollEvent()) {
       // Close window: exit
@@ -59,10 +81,26 @@ int main() {
         text_fps.setString(std::format("fps/fps_limit: {:.1f}/{}", 1.f / dt, fps_limit));
       update_text_clock.restart();
     }
-
     window.clear(sf::Color::Black);
     window.draw(grid_lines);
     window.draw(text_fps);
+    if (step < block_size && eof < 0) {
+
+        //draw as normal
+      step++;
+    } else if (eof >= 0) {
+      if (step < eof- block_size*(block_n-1)){
+        //reached eof while loading block but the current step in block is still valid
+        //draw as normal
+      step++;
+      }
+    } else if (eof < 0) {
+      // didnt reach eof yet
+      block_n++;
+      load_blocks(files, blocks);
+    } else {
+      // reached eof
+    }
 
     window.display();
     dt = fps_clock.restart().asSeconds();
@@ -85,5 +123,24 @@ void make_grid(sf::VertexArray &lines, const sf::Color &color, sf::Vector2f offs
     lines[2 * (vertical_cells + 1 + i) + 1].position = {offset.x + vertical_cells * spacing, offset.y + i * spacing};
     lines[2 * (vertical_cells + 1 + i)].color = color;
     lines[2 * (vertical_cells + 1 + i) + 1].color = color;
+  }
+}
+void load_blocks(std::array<std::ifstream, bodies_n> &f,
+                 std::array<std::array<smlib::mvec<float, 2>, block_size>, bodies_n> &blocks) {
+  for (size_t body = 0; body < bodies_n; ++body) {
+    for (size_t i = 0; i < block_size; ++i) {
+      std::string s;
+      if (getline(f[body], s)) {
+        std::stringstream ss(s);
+        for (int j = 0; j < 2; j++) {
+          ss >> blocks[body][i][j];
+        }
+        std::cout << std::format("blocks[{}][{}]: {}\n", body, i, blocks[body][i]);
+      } else {
+        std::cout << "End of file;\n";
+        eof = i;
+        return;
+      }
+    }
   }
 }
