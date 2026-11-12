@@ -1,14 +1,18 @@
 #include "../../smlib/smlib.hpp"
 #include <SFML/Graphics.hpp>
 #include <SFML/Graphics/CircleShape.hpp>
+#include <SFML/Graphics/RenderTarget.hpp>
+#include <SFML/Graphics/RenderTexture.hpp>
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/System/Time.hpp>
+#include <SFML/Window/Window.hpp>
 #include <array>
 #include <cstddef>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
 static const size_t bodies_n = 2;
@@ -18,13 +22,20 @@ void make_grid(sf::VertexArray &lines, const sf::Color &color, sf::Vector2f offs
                unsigned horizontal_cells, float spacing);
 void load_blocks(std::array<std::ifstream, bodies_n> &f,
                  std::array<std::array<smlib::mvec<float, 2>, block_size>, bodies_n> &blocks);
+void draw_bodies(sf::RenderTarget &target ,const auto &blocks,
+                 std::array<sf::CircleShape, bodies_n> &bodies_shapes, int step, const auto origin_offset = {0, 0},
+                 int draw_scale = 1);
 int main() {
 
   const unsigned winWidth = 1080;
   const unsigned winHeight = 1080;
+  const int scale = 50;
+  const int radius = 5;
   const unsigned fps_limit = 60;
   const unsigned font_size = 10;
   const sf::Time text_update_time = sf::milliseconds(500); // how long to wait between text updates;
+  smlib::mvec<int, 2> origin_offset = {winWidth, winHeight};
+  origin_offset /= 2;
   std::array<std::ifstream, bodies_n> files;
   std::array<std::array<smlib::mvec<float, 2>, block_size>, bodies_n> blocks;
   float dt = 0;
@@ -34,6 +45,9 @@ int main() {
   sf::Text text_fps(font);
   sf::VertexArray grid_lines(sf::PrimitiveType::Lines);
   std::array<sf::CircleShape, bodies_n> bodies_shapes;
+  sf::RenderWindow window(sf::VideoMode({winWidth, winHeight}), "sfml_win", sf::Style::Close);
+  sf::RenderTexture texture({winWidth, winHeight});
+
   if (!font.openFromFile("./0xProtoNerdFontMono-Regular.ttf")) {
     std::cerr << "Error: couldnt load font\n";
     return 1;
@@ -52,22 +66,20 @@ int main() {
   text_fps.setCharacterSize(font_size);
   text_fps.setFillColor(sf::Color::Red);
   text_fps.setPosition({0, 0});
-  sf::RenderWindow window(sf::VideoMode({winWidth, winHeight}), "sfml_win", sf::Style::Close);
+
   window.setFramerateLimit(fps_limit);
 
   make_grid(grid_lines, sf::Color::White, {(winWidth - 21 * 50) / 2.f, (winHeight - 21 * 50) / 2.f}, 21, 21, 50);
-
+  // texture.draw(grid_lines);
   int step = 0;
   int block_n = 0;
   block_n++;
   load_blocks(files, blocks);
-  return 0;
   for (size_t i = 0; i < bodies_n; ++i) {
-    bodies_shapes[i].setRadius(5);
+    bodies_shapes[i].setRadius(radius);
     bodies_shapes[i].setFillColor(
         {static_cast<uint8_t>(255 / (i + 1)), static_cast<uint8_t>(255 - 255 / (i + 1)), 255});
   }
-  return 0;
   while (window.isOpen()) {
     while (const std::optional<sf::Event> event = window.pollEvent()) {
       // Close window: exit
@@ -85,19 +97,24 @@ int main() {
     window.draw(grid_lines);
     window.draw(text_fps);
     if (step < block_size && eof < 0) {
-
-        //draw as normal
+      draw_bodies(window, blocks, bodies_shapes, step, origin_offset, scale);
+      draw_bodies(texture, blocks, bodies_shapes, step, origin_offset, scale);
+      -----------------------------------------------------------------------------------------------------
+      // draw as normal
       step++;
     } else if (eof >= 0) {
-      if (step < eof- block_size*(block_n-1)){
-        //reached eof while loading block but the current step in block is still valid
-        //draw as normal
-      step++;
+      if (step < eof - block_size * (block_n - 1)) {
+        // reached eof while loading block but the current step in block is still valid
+        // draw as normal
+        // draw_bodies(window, blocks, bodies_shapes, step, origin_offset, scale);
+        step++;
       }
     } else if (eof < 0) {
       // didnt reach eof yet
       block_n++;
+      step = 0;
       load_blocks(files, blocks);
+      // draw_bodies(window, blocks, bodies_shapes, step, origin_offset, scale);
     } else {
       // reached eof
     }
@@ -135,12 +152,27 @@ void load_blocks(std::array<std::ifstream, bodies_n> &f,
         for (int j = 0; j < 2; j++) {
           ss >> blocks[body][i][j];
         }
-        std::cout << std::format("blocks[{}][{}]: {}\n", body, i, blocks[body][i]);
+        // std::cout << std::format("blocks[{}][{}]: {}\n", body, i, blocks[body][i]);
       } else {
         std::cout << "End of file;\n";
         eof = i;
         return;
       }
     }
+  }
+  std::cout << "loaded block\n";
+}
+void draw_bodies(sf::RenderTarget &target, const auto &blocks,
+                 std::array<sf::CircleShape, bodies_n> &bodies_shapes, int step, const auto origin_offset ,
+                 int draw_scale) {
+  for (size_t i = 0; i < bodies_n; ++i) {
+    smlib::mvec<float, 2> pos = blocks[i][step];
+    pos *= draw_scale;
+    std::cout << std::format("body={}; step={}; PRE-OFFSET: x={}, y={}; POST-OFFSET: x=", i, step, pos.x(), pos.y());
+    pos += smlib::cast<int, float>(origin_offset);
+    pos -= bodies_shapes[i].getRadius() / 2.f;
+    std::cout << pos.x() << ", y=" << pos.y() << "\n";
+    bodies_shapes[i].setPosition({pos.x(), pos.y()});
+    target.draw(bodies_shapes[i]);
   }
 }

@@ -13,7 +13,7 @@
 
 const static size_t dimensions = 2;
 const static size_t bodies_n = 2;
-const static uint steps = pow(10, 1);
+const static uint steps = pow(10, 3);
 const static uint output_every_n_step = pow(10, 0);
 const static float G = 6.6743 * pow(10, -11);
 struct Body_state {
