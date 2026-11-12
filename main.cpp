@@ -111,8 +111,8 @@ int main(int argc, char *argv[]) {
 
   Time dt(0.01);
   std::array<Body_state, bodies_n> bodies_bs;
-  bodies_bs[0].pos = {0, -1};
-  bodies_bs[0].vel = {1, 0};
+  bodies_bs[0].pos = {0, 0};
+  bodies_bs[0].vel = {0, 0};
   bodies_bs[0].mass = 1;
   bodies_bs[1].pos = {0, 1};
   bodies_bs[1].vel = {-1, 0};
